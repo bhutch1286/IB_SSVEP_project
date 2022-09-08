@@ -1,0 +1,330 @@
+library(readxl)
+library(dplyr)
+library(reshape2)
+library(rstatix)
+library(lsr)
+
+#-------------------data preparation and preprocessing-------------------------#
+
+SSVEP_SNR_wide <- read_excel("Documents/SSVEP_SNR_wide.xlsx", na = "NA")
+
+#factorising
+str(SSVEP_SNR_wide)
+factor_variables <- c('gender', 'handedness', 'CT_notice', 'DA_notice', 'FA_notice', 'comp_notice', 'cb')
+SSVEP_SNR_wide[,factor_variables] <- lapply(SSVEP_SNR_wide[,factor_variables], factor)
+str(SSVEP_SNR_wide)
+
+#for repeated measures, need the data from wide to long format
+SSVEP_long <- reshape2::melt(SSVEP_SNR_wide,
+                                     id.vars = c("subject", "CT_notice", "DA_notice", "FA_notice", "gender", "handedness", "comp_notice", "cb"),
+                                     measure.vars = c("train_target", "train_distractor",
+                                                      "CT_CS", "CT_target", "CT_distractor", 
+                                                      "DA_CS", "DA_target", "DA_distractor",
+                                                      "FA_CS", "FA_target", "FA_distractor",
+                                                      "Noise_train_target", "Noise_train_distractor",
+                                                      "Noise_CT_CS", "Noise_CT_target", "Noise_CT_distractor",
+                                                      "Noise_DA_CS", "Noise_DA_target", "Noise_DA_distractor",
+                                                      "Noise_FA_CS", "Noise_FA_target", "Noise_FA_distractor"
+                                                      ),
+                                     variable.name = "stimulus", 
+                                     value.name = "SSVEP")
+
+#trial and stimulus should be separate variables
+SSVEP_long$trial <- case_when(
+  SSVEP_long$stimulus == "train_target" | SSVEP_long$stimulus == "train_distractor" | SSVEP_long$stimulus == "Noise_train_target" | SSVEP_long$stimulus == "Noise_train_distractor" ~ "train",
+  SSVEP_long$stimulus == "CT_CS" | SSVEP_long$stimulus == "CT_target" | SSVEP_long$stimulus == "CT_distractor" | SSVEP_long$stimulus == "Noise_CT_CS" | SSVEP_long$stimulus == "Noise_CT_target" | SSVEP_long$stimulus == "Noise_CT_distractor" ~ "CT",
+  SSVEP_long$stimulus == "DA_CS" | SSVEP_long$stimulus == "DA_target" | SSVEP_long$stimulus == "DA_distractor" | SSVEP_long$stimulus == "Noise_DA_CS" | SSVEP_long$stimulus == "Noise_DA_target" | SSVEP_long$stimulus == "Noise_DA_distractor" ~ "DA",
+  SSVEP_long$stimulus == "FA_CS" | SSVEP_long$stimulus == "FA_target" | SSVEP_long$stimulus == "FA_distractor" | SSVEP_long$stimulus == "Noise_FA_CS" | SSVEP_long$stimulus == "Noise_FA_target" | SSVEP_long$stimulus == "Noise_FA_distractor" ~ "FA",
+  TRUE            ~ "nope")
+
+renaming <- c("target", "distractor",
+              "CS", "target", "distractor",
+              "CS", "target", "distractor",
+              "CS", "target", "distractor",
+              "target_noise", "distractor_noise",
+              "CS_noise", "target_noise", "distractor_noise",
+              "CS_noise", "target_noise", "distractor_noise",
+              "CS_noise", "target_noise", "distractor_noise"
+              )
+levels(SSVEP_long$stimulus) <- renaming
+SSVEP_long$trial <- as.factor(SSVEP_long$trial)
+
+
+#-----------------paired t tests for baseline comparison-----------------------#
+
+
+#-------target-------#
+
+#dataset with only target and target_noise
+SSVEP_long_target <- SSVEP_long[SSVEP_long$stimulus == "target" | SSVEP_long$stimulus == "target_noise",]
+
+#dataset with only training trials
+SSVEP_long_target_train <- SSVEP_long_target[SSVEP_long_target$trial == "train",]
+#dataset with only critical trials
+SSVEP_long_target_CT <- SSVEP_long_target[SSVEP_long_target$trial == "CT",]
+#dataset with only DA trials
+SSVEP_long_target_DA <- SSVEP_long_target[SSVEP_long_target$trial == "DA",]
+#dataset with only FA trials
+SSVEP_long_target_FA <- SSVEP_long_target[SSVEP_long_target$trial == "FA",]
+
+
+dfs <- lapply(list(SSVEP_long_target_train, SSVEP_long_target_CT, SSVEP_long_target_DA, SSVEP_long_target_FA), droplevels)
+SSVEP_long_target_train <- dfs[[1]]
+SSVEP_long_target_CT <- dfs[[2]]
+SSVEP_long_target_DA <- dfs[[3]]
+SSVEP_long_target_FA <- dfs[[4]]
+
+#--target signal vs noise training
+training.target.baseline.pwc <- SSVEP_long_target_train %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_target_train,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--target signal vs noise CT
+critical.target.baseline.pwc <- SSVEP_long_target_CT %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_target_CT,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--target signal vs noise DA
+DA.target.baseline.pwc <- SSVEP_long_target_DA %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_target_DA,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--target signal vs noise FA
+FA.target.baseline.pwc <- SSVEP_long_target_FA %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_target_FA,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#-------distractor-------#
+
+#dataset with only distractor and distractor_noise
+SSVEP_long_distractor <- SSVEP_long[SSVEP_long$stimulus == "distractor" | SSVEP_long$stimulus == "distractor_noise",]
+
+#dataset with only training trials
+SSVEP_long_distractor_train <- SSVEP_long_distractor[SSVEP_long_distractor$trial == "train",]
+#dataset with only critical trials
+SSVEP_long_distractor_CT <- SSVEP_long_distractor[SSVEP_long_distractor$trial == "CT",]
+#dataset with only DA trials
+SSVEP_long_distractor_DA <- SSVEP_long_distractor[SSVEP_long_distractor$trial == "DA",]
+#dataset with only FA trials
+SSVEP_long_distractor_FA <- SSVEP_long_distractor[SSVEP_long_distractor$trial == "FA",]
+
+dfs <- lapply(list(SSVEP_long_distractor_train, SSVEP_long_distractor_CT, SSVEP_long_distractor_DA, SSVEP_long_distractor_FA), droplevels)
+SSVEP_long_distractor_train <- dfs[[1]]
+SSVEP_long_distractor_CT <- dfs[[2]]
+SSVEP_long_distractor_DA <- dfs[[3]]
+SSVEP_long_distractor_FA <- dfs[[4]]
+
+#--distractor signal vs noise training
+training.distractor.baseline.pwc <- SSVEP_long_distractor_train %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_distractor_train,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--target signal vs noise CT
+critical.distractor.baseline.pwc <- SSVEP_long_distractor_CT %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_distractor_CT,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--target signal vs noise DA
+DA.distractor.baseline.pwc <- SSVEP_long_distractor_DA %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_distractor_DA,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--target signal vs noise FA
+FA.distractor.baseline.pwc <- SSVEP_long_distractor_FA %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_distractor_FA,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#-------CS-------#
+
+#dataset with only CS and CS_noise
+SSVEP_long_CS <- SSVEP_long[SSVEP_long$stimulus == "CS" | SSVEP_long$stimulus == "CS_noise",]
+
+#dataset with only critical trials
+SSVEP_long_CS_CT <- SSVEP_long_CS[SSVEP_long_CS$trial == "CT",]
+#dataset with only DA trials
+SSVEP_long_CS_DA <- SSVEP_long_CS[SSVEP_long_CS$trial == "DA",]
+#dataset with only FA trials
+SSVEP_long_CS_FA <- SSVEP_long_CS[SSVEP_long_CS$trial == "FA",]
+
+dfs <- lapply(list(SSVEP_long_CS_CT, SSVEP_long_CS_DA, SSVEP_long_CS_FA), droplevels)
+SSVEP_long_CS_CT <- dfs[[1]]
+SSVEP_long_CS_DA <- dfs[[2]]
+SSVEP_long_CS_FA <- dfs[[3]]
+
+#--CS (unexpected object) signal vs noise CT
+critical.CS.baseline.pwc <- SSVEP_long_CS_CT %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_CS_CT,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--CS (unexpected object) signal vs noise DA
+DA.CS.baseline.pwc <- SSVEP_long_CS_DA %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_CS_DA,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--CS (unexpected object) signal vs noise FA
+FA.CS.baseline.pwc <- SSVEP_long_CS_FA %>%
+  pairwise_t_test(SSVEP ~ stimulus,
+                  paired = TRUE)
+cohens_d(formula = SSVEP ~ stimulus,
+         data = SSVEP_long_CS_FA,
+         var.equal = FALSE,
+         hedges.correction = TRUE,
+         paired=TRUE)
+
+#--CS (unexpected object) independent samples t test (noticer status) CT
+ct.cs.t <- t.test(formula = CT_CS ~ comp_notice,
+       data = SSVEP_SNR_wide,
+       var.equal = FALSE,
+       alternative = "two.sided",
+       conf.level = .95)
+cohens_d(formula = CT_CS ~ comp_notice,
+         data = SSVEP_SNR_wide,
+         var.equal = FALSE,
+         hedges.correction = TRUE)
+
+#--CS (unexpected object) independent samples t test (noticer status) DA
+da.cs.t <- t.test(formula = DA_CS ~ comp_notice,
+       data = SSVEP_SNR_wide,
+       var.equal = FALSE,
+       alternative = "two.sided",
+       conf.level = .95)
+cohens_d(formula = DA_CS ~ comp_notice,
+         data = SSVEP_SNR_wide,
+         var.equal = FALSE,
+         hedges.correction = TRUE)
+
+#-----------------------------------ANOVA--------------------------------------#
+
+#------------2 (noticing) x 2 (trial: CT, DA) x 2 (stimulus: target, distractor)
+
+#dataset with only target and distractor
+SSVEP_long_td <- SSVEP_long[SSVEP_long$stimulus == "target" | SSVEP_long$stimulus == "distractor",]
+
+#dataset with only CT and DA
+SSVEP_long_td_ctda <- SSVEP_long_td[SSVEP_long_td$trial == "CT" | SSVEP_long_td$trial == "DA",]
+SSVEP_long_td_ctda <- droplevels(SSVEP_long_td_ctda)
+
+#ANOVA
+across.aov <- anova_test(data = SSVEP_long_td_ctda,
+                                dv = SSVEP,
+                                wid = subject,
+                                within = c(trial, stimulus),
+                                between = comp_notice,
+                                effect.size = 'pes')
+across.aov
+
+#-----follow up t tests (simple effects)
+
+#--distractor independent samples t test (noticer status) CT
+ct.distractor.t <- t.test(formula = CT_distractor ~ comp_notice,
+       data = SSVEP_SNR_wide,
+       var.equal = FALSE,
+       alternative = "two.sided",
+       conf.level = .95)
+cohens_d(formula = CT_distractor ~ comp_notice,
+         data = SSVEP_SNR_wide,
+         var.equal = FALSE,
+         hedges.correction = TRUE)
+
+#--target independent samples t test (noticer status) CT
+ct.target.t <- t.test(formula = CT_target ~ comp_notice,
+       data = SSVEP_SNR_wide,
+       var.equal = FALSE,
+       alternative = "two.sided",
+       conf.level = .95)
+cohens_d(formula = CT_target ~ comp_notice,
+         data = SSVEP_SNR_wide,
+         var.equal = FALSE,
+         hedges.correction = TRUE)
+
+#--distractor independent samples t test (noticer status) DA
+da.distractor.t <- t.test(formula = DA_distractor ~ comp_notice,
+       data = SSVEP_SNR_wide,
+       var.equal = FALSE,
+       alternative = "two.sided",
+       conf.level = .95)
+cohens_d(formula = DA_distractor ~ comp_notice,
+         data = SSVEP_SNR_wide,
+         var.equal = FALSE,
+         hedges.correction = TRUE)
+
+#--target independent samples t test (noticer status) DA
+da.target.t <- t.test(formula = DA_target ~ comp_notice,
+       data = SSVEP_SNR_wide,
+       var.equal = FALSE,
+       alternative = "two.sided",
+       conf.level = .95)
+cohens_d(formula = DA_target ~ comp_notice,
+         data = SSVEP_SNR_wide,
+         var.equal = FALSE,
+         hedges.correction = TRUE)
+
+
+
+#---------------2 (noticing) x 3 (stimulus: target, distractor, CS) for FA trial
+#dataset with no noise SSVEP
+SSVEP_long_no_noise <- SSVEP_long[SSVEP_long$stimulus == "target" | SSVEP_long$stimulus == "distractor" | SSVEP_long$stimulus == "CS",]
+
+#dataset with only FA
+SSVEP_long_no_noise_FA <- SSVEP_long_no_noise[SSVEP_long_no_noise$trial == "FA",]
+SSVEP_long_no_noise_FA <- droplevels(SSVEP_long_no_noise_FA)
+str(SSVEP_long_no_noise_FA)
+
+#ANOVA
+FA_across.aov <- anova_test(data = SSVEP_long_no_noise_FA,
+                         dv = SSVEP,
+                         wid = subject,
+                         within = stimulus,
+                         between = comp_notice,
+                         effect.size = 'pes')
+FA_across.aov
