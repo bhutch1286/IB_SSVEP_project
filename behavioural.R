@@ -4,8 +4,6 @@ library(rstatix)
 library(reshape2)
 library(tibble)
 
-#Note: BF's were calculated in JASP
-
 #-------------------data preparation and preprocessing-------------------------#
 
 #importing data
